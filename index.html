@@ -884,10 +884,16 @@ function shrinkDataURL(src,max=700,q=.8){return new Promise(res=>{const im=new I
 function fileToDataURL(f){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(f)})}
 /* as imagens ficam guardadas dentro das próprias anotações, já comprimidas */
 const imagens={async upload(blob){const url=await shrinkDataURL(await fileToDataURL(blob),700,.8);if(!url)throw new Error("img");return{id:"",url}},async delete(){}};
-function podeEditar(){canWrite=!!usuario&&(!dono||dono===usuario.uid);$("add").hidden=!canWrite;$("gear").setAttribute("aria-label",canWrite?"Ajustes":"Entrar");render()}
+let avisou=false;
+function podeEditar(){
+  if(usuario&&dono&&dono!==usuario.uid){if(!avisou){avisou=true;toast("Essa conta não pode editar este caderno. Entre com a conta da dona.")}firebase.auth().signOut();usuario=null}
+  else avisou=false;
+  canWrite=!!usuario&&(!dono||dono===usuario.uid);$("add").hidden=!canWrite;$("gear").setAttribute("aria-label",canWrite?"Ajustes":"Entrar");render()}
 async function entrar(){
-  try{await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())}
-  catch(err){if(err&&err.code==="auth/popup-blocked"){firebase.auth().signInWithRedirect(new firebase.auth.GoogleAuthProvider())}else if(!(err&&/popup-closed|cancelled/.test(err.code||"")))toast("Não consegui entrar. Tente de novo.")}
+  const prov=new firebase.auth.GoogleAuthProvider();prov.setCustomParameters({prompt:"select_account"});
+  try{await firebase.auth().signInWithPopup(prov)}
+  catch(err){if(err&&err.code==="auth/popup-blocked"){firebase.auth().signInWithRedirect(prov)}else if(err&&err.code==="auth/unauthorized-domain")toast("Falta autorizar o endereço do site no Firebase (Authentication › Configurações › Domínios autorizados).");
+  else if(!(err&&/popup-closed|cancelled/.test(err.code||"")))toast("Não consegui entrar. Tente de novo.")}
 }
 $("logout").onclick=async()=>{await firebase.auth().signOut();closeCfg();toast("Você saiu da conta")};
 
