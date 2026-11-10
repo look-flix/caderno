@@ -214,6 +214,11 @@ body.hh .banner i{display:none}
 body.hh .layout{margin-top:-70px}
 body.hh .side{padding-top:90px}
 @media (max-width:900px){body.hh .side{padding-top:20px}}
+.loading{display:flex;flex-direction:column;gap:14px;padding:6px 0 20px}
+.loading span{height:72px;background:linear-gradient(90deg,#F2F2F2,#FAFAFA,#F2F2F2);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+.loading span:first-child{height:96px}
+@keyframes shimmer{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.loading span{animation:none}}
 .sec2{font-weight:500;font-size:1.08rem;margin:0 0 14px}
 .cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:30px}
 .catb{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);padding:6px 12px 6px 6px;cursor:pointer;text-align:left;color:var(--ink);min-width:0}
@@ -459,8 +464,8 @@ let draft=null,openPicker=null,photoTarget=null,formCover=null;
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2400)}
 function norm(s){return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim()}
-function data(){return notes.length?notes:EXEMPLOS}
-function demo(){return !notes.length}
+function data(){return notes}
+function demo(){return false}
 function capa(id){return capas.find(c=>c.id===id)}
 function catName(id){return capa(id)?.name||"Sem categoria"}
 function bgStyle(c){return`--t:${esc(c?.bg||"#F4F3F0")}${c?.photo?`;background-image:url('${esc(c.photo)}')`:""}`}
@@ -529,7 +534,10 @@ function tabsHtml(){return`<div class="tabs" role="tablist">${capas.map(c=>`<but
 function aboutHtml(){
   const ini=(perfil.nome||"?").trim().charAt(0).toUpperCase();
   return`<div class="about"><div class="av" style="${perfil.foto?`background-image:url('${esc(perfil.foto)}')`:""}">${perfil.foto?"":esc(ini)}</div><div><b>${esc(perfil.nome||"Sobre mim")}</b>${perfil.sobre?`<p>${esc(perfil.sobre)}</p>`:""}</div></div>`}
+let pronto={cfg:false,notes:false};
 function render(){
+  $("heroT").textContent=perfil.titulo||"";$("heroP").textContent=perfil.frase||"";$("heroP").hidden=!perfil.frase;
+  if(!(pronto.cfg&&pronto.notes)){document.body.classList.add("hh");$("view").innerHTML=`<div class="loading" aria-label="Carregando"><span></span><span></span><span></span></div>`;$("side").innerHTML="";$("sbox").hidden=true;$("backTop").hidden=true;return}
   const all=data(),t=norm(term);
   if(cat&&!capa(cat))cat="";
   if(openId&&!all.find(n=>n.id===openId))openId="";
@@ -594,8 +602,8 @@ let pickedCat="";
 function fillChips(){
   $("catChips").innerHTML=capas.map(c=>`<button type="button" class="chip" role="radio" aria-checked="${c.id===pickedCat}" aria-pressed="${c.id===pickedCat}" data-c="${esc(c.id)}"><span class="dot" style="${bgStyle(c)}"></span>${esc(c.name)}</button>`).join("");
 }
-function showCover(){const p=$("coverPrev");p.style.backgroundImage=formCover?`url('${formCover.url}')`:"";p.classList.toggle("has",!!formCover);$("coverRm").hidden=!formCover;$("coverBtn").textContent="ou escolher do computador"}
-$("catChips").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;pickedCat=b.dataset.c;fillChips()};
+function showCover(){setTimeout(salvarRascunho,0);const p=$("coverPrev");p.style.backgroundImage=formCover?`url('${formCover.url}')`:"";p.classList.toggle("has",!!formCover);$("coverRm").hidden=!formCover;$("coverBtn").textContent="ou escolher do computador"}
+$("catChips").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;pickedCat=b.dataset.c;fillChips();salvarRascunho()};
 function openSheet(n,preset){
   editing=n||null;$("formTitle").textContent=n?"Editar anotação":"Nova anotação";$("save").textContent=n?"Salvar":"Publicar";
   $("f-title").value=n?.title||"";$("f-text").value=n?.text||"";
@@ -607,7 +615,23 @@ function grow(){const y=$("form").scrollTop;for(const t of [$("f-title"),$("f-te
 $("f-title").addEventListener("input",grow);
 $("f-title").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("f-text").focus()}});
 $("f-text").addEventListener("input",grow);
-function closeSheet(){$("sheetBg").hidden=true;editing=null}
+/* rascunho: tudo que você digita fica guardado no aparelho até salvar ou cancelar */
+function salvarRascunho(){if($("sheetBg").hidden)return;try{localStorage.setItem("rascunho",JSON.stringify({id:editing?.id||"",title:$("f-title").value,text:$("f-text").value,cat:pickedCat,img:formCover,t:Date.now()}))}catch{}}
+function lerRascunho(){try{return JSON.parse(localStorage.getItem("rascunho")||"null")}catch{return null}}
+function apagarRascunho(){try{localStorage.removeItem("rascunho")}catch{}}
+let rascunhoVisto=false;
+function tentarRascunho(){
+  if(rascunhoVisto||!canWrite||!pronto.notes||!$("sheetBg").hidden)return;
+  rascunhoVisto=true;const r=lerRascunho();if(!r||!(r.title||r.text))return;
+  const n=r.id?notes.find(x=>x.id===r.id):null;
+  openSheet(n||null);
+  $("f-title").value=r.title||"";$("f-text").value=r.text||"";pickedCat=r.cat||pickedCat;formCover=r.img||null;fillChips();showCover();grow();
+  toast("Recuperei o que você estava escrevendo");
+}
+["f-title","f-text"].forEach(id=>$(id).addEventListener("input",salvarRascunho));
+window.addEventListener("beforeunload",e=>{if(!$("sheetBg").hidden){salvarRascunho();e.preventDefault();e.returnValue=""}});
+document.addEventListener("visibilitychange",()=>{if(document.hidden)salvarRascunho()});
+function closeSheet(){$("sheetBg").hidden=true;editing=null;apagarRascunho()}
 async function shrink(file,max=1000){
   try{
     const bmp=await createImageBitmap(file);const k=Math.min(1,max/Math.max(bmp.width,bmp.height));
@@ -650,7 +674,7 @@ pb.addEventListener("keydown",e=>{if(!(e.ctrlKey||e.metaKey)&&e.key.length===1)e
 pb.addEventListener("drop",e=>{e.preventDefault();const f=imageFrom(e.dataTransfer);if(f)setCover(f);else toast("Arraste a imagem salva no computador, ou use “Copiar imagem” e cole.")});
 $("add").onclick=()=>openSheet();
 $("cancel").onclick=closeSheet;
-$("sheetBg").onclick=e=>{if(e.target===$("sheetBg"))closeSheet()};
+
 $("form").onsubmit=async e=>{
   e.preventDefault();if(!col){toast("Sem conexão com o caderno agora.");return}
   const d={title:$("f-title").value.trim(),text:$("f-text").value.trim(),cat:pickedCat,img:formCover?.url||"",imgId:formCover?.id||""};
@@ -900,7 +924,7 @@ let avisou=false;
 function podeEditar(){
   if(usuario&&dono&&dono!==usuario.uid){if(!avisou){avisou=true;toast("Essa conta não pode editar este caderno. Entre com a conta da dona.")}firebase.auth().signOut();usuario=null}
   else avisou=false;
-  canWrite=!!usuario&&(!dono||dono===usuario.uid);$("add").hidden=!canWrite;$("gear").setAttribute("aria-label",canWrite?"Ajustes":"Entrar");render()}
+  canWrite=!!usuario&&(!dono||dono===usuario.uid);$("add").hidden=!canWrite;$("gear").setAttribute("aria-label",canWrite?"Ajustes":"Entrar");render();tentarRascunho()}
 async function entrar(){
   const prov=new firebase.auth.GoogleAuthProvider();prov.setCustomParameters({prompt:"select_account"});
   try{await firebase.auth().signInWithPopup(prov)}
@@ -937,18 +961,24 @@ render();
   canWrite=false;$("add").hidden=true;
   if(typeof firebaseConfig!=="object"||!firebaseConfig.apiKey){st.hidden=false;st.textContent="Falta colocar a configuração do Firebase no arquivo index.html.";return}
   firebase.initializeApp(firebaseConfig);
-  db=firebase.firestore();assets=imagens;col=db.collection("notes");
+  db=firebase.firestore();
+  try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch{}
+  assets=imagens;col=db.collection("notes");
+  try{const c=JSON.parse(localStorage.getItem("cfgCache")||"null");if(c){if(Array.isArray(c.cats)&&c.cats.length)capas=c.cats;if(c.perfil)perfil={...PERFIL0,...c.perfil};pronto.cfg=true;render()}}catch{}
   const timer=setTimeout(()=>{st.hidden=false;st.textContent="Não consegui carregar as anotações ainda. Verifique a internet."},10000);
   db.doc("config/capas").onSnapshot(s=>{
     const d=s.exists?s.data():{};
     if(Array.isArray(d.cats)&&d.cats.length)capas=d.cats.map(x=>({...x}));
     if(d.perfil&&typeof d.perfil==="object")perfil={...PERFIL0,...d.perfil};
-    dono=d.dono||"";document.title=perfil.titulo||"Caderno de Marcações";podeEditar();
+    dono=d.dono||"";document.title=perfil.titulo||"Caderno de Marcações";
+    if(s.exists||!s.metadata.fromCache){pronto.cfg=true;try{localStorage.setItem("cfgCache",JSON.stringify({cats:capas,perfil}))}catch{}}
+    podeEditar();
   },()=>{});
   col.onSnapshot(s=>{
     notes=s.docs.map(d=>({id:d.id,...d.data()})).filter(n=>n.text);
+    if(!s.metadata.fromCache||s.docs.length){pronto.notes=true}
     if(!s.metadata.fromCache){clearTimeout(timer);st.hidden=true;loaded=true}
-    render();
+    render();tentarRascunho();
   },()=>{clearTimeout(timer);st.hidden=false;st.textContent="O caderno ficou indisponível. Recarregue a página mais tarde."});
   firebase.auth().onAuthStateChanged(u=>{usuario=u;podeEditar()});
 })();
